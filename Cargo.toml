@@ -1,0 +1,23 @@
+[package]
+name = "lf"
+description = "List files with line and token counts"
+version = "0.1.0"
+edition = "2024"
+default-run = "lf"
+
+[dependencies]
+walkdir = "2"
+clap = { version = "4", features = ["derive"] }
+arboard = "3"
+tiktoken-rs = "0.5"
+globset = "0.4"
+rayon = "1.8"
+anyhow = "1.0"
+thiserror = "1.0"
+
+[profile.release]
+opt-level = "z"            # Optimize for size
+lto = true                 # Enable link-time optimization
+codegen-units = 1          # Better optimization at the cost of compile time
+strip = true               # Strip symbols
+panic = "abort"            # Remove unwinding machinery
