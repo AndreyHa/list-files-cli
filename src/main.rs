@@ -12,7 +12,7 @@ use std::{
         Arc, Mutex,
     },
 };
-use tiktoken_rs::cl100k_base;
+use tiktoken_rs::o200k_base;
 use walkdir::WalkDir;
 
 /// Trait for abstracting tokenization
@@ -20,19 +20,19 @@ trait Tokenizer: Send + Sync {
     fn count_tokens(&self, text: &str) -> usize;
 }
 
-/// Implementation using cl100k_base tokenizer
-struct Cl100kTokenizer {
+/// Implementation using the o200k_base tokenizer
+struct O200kTokenizer {
     bpe: tiktoken_rs::CoreBPE,
 }
 
-impl Cl100kTokenizer {
+impl O200kTokenizer {
     fn new() -> Result<Self> {
-        let bpe = cl100k_base().context("Failed to initialize cl100k_base tokenizer")?;
+        let bpe = o200k_base().context("Failed to initialize o200k_base tokenizer")?;
         Ok(Self { bpe })
     }
 }
 
-impl Tokenizer for Cl100kTokenizer {
+impl Tokenizer for O200kTokenizer {
     fn count_tokens(&self, text: &str) -> usize {
         self.bpe.encode_with_special_tokens(text).len()
     }
@@ -227,7 +227,7 @@ fn main() -> Result<()> {
     }
 
     // Initialize tokenizer
-    let tokenizer = Arc::new(Cl100kTokenizer::new()?);
+    let tokenizer = Arc::new(O200kTokenizer::new()?);
 
     // Process files in parallel
     let total_lines = Arc::new(AtomicUsize::new(0));
@@ -342,7 +342,7 @@ fn main() -> Result<()> {
     let final_tokens = total_tokens.load(Ordering::Relaxed);
 
     println!("Lines: {}", final_lines);
-    println!("Tokens (cl100k_base): {}", final_tokens);
+    println!("Tokens (o200k_base): {}", final_tokens);
 
     Ok(())
 }
