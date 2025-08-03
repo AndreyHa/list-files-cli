@@ -191,6 +191,15 @@ fn main() -> Result<()> {
     let include_set = include_builder.build()?;
     let exclude_set = exclude_builder.build()?;
 
+    // Check if any patterns explicitly include hidden files/directories
+    let has_explicit_hidden_patterns = args.patterns.iter().any(|pattern| {
+        if pattern.starts_with('~') {
+            false // Exclude patterns don't count
+        } else {
+            pattern.starts_with('.') || pattern.contains("/.") || pattern == "**/*" || pattern == "."
+        }
+    });
+
     // Collect matching files
     let files: Vec<PathBuf> = WalkDir::new(".")
         .into_iter()
@@ -208,6 +217,15 @@ fn main() -> Result<()> {
             let filename = path.file_name()
                 .map(|f| f.to_string_lossy().to_string())
                 .unwrap_or_default();
+            
+            // Check if this is a hidden file/directory (unless explicitly included)
+            if !has_explicit_hidden_patterns {
+                // Check if any component of the path starts with a dot (hidden)
+                let path_components: Vec<&str> = stripped_path.split('/').collect();
+                if path_components.iter().any(|component| component.starts_with('.') && *component != "." && *component != "..") {
+                    return false;
+                }
+            }
             
             // Check both original and stripped paths
             let matches_include = include_set.is_match(&path_str) || 
