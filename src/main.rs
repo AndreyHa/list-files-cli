@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use arboard::Clipboard;
 use clap::Parser;
-use globset::{Glob, GlobSetBuilder};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use rayon::prelude::*;
 use std::{
     fs::File,
@@ -111,6 +111,42 @@ fn get_binary_file_info(path: &Path) -> Result<String> {
     }
 }
 
+/// A glob is considered "hidden-explicit" iff it starts with '.' or contains '/.'
+fn is_hidden_glob(glob: &str) -> bool {
+    let g = glob.trim_start_matches("./");
+    (g.starts_with('.') && g.len() > 1) || g.contains("/.")
+}
+
+fn build_glob_sets(patterns: &[String]) -> Result<(GlobSet, GlobSet, GlobSet)> {
+    let mut vis_inc = GlobSetBuilder::new();     // visible includes
+    let mut hid_inc = GlobSetBuilder::new();     // hidden includes
+    let mut exc     = GlobSetBuilder::new();     // excludes (same as before)
+
+    for p in patterns {
+        if let Some(raw) = p.strip_prefix('~') {
+            exc.add(Glob::new(raw)?);
+            continue;
+        }
+
+        // normalise convenience shorthand
+        let norm = match p.as_str() {
+            "." | "./"          => "**/*",
+            dir if dir.ends_with('/') => &format!("{dir}**/*"),
+            dir if !dir.contains(['*', '/', '.']) =>
+                &format!("{dir}/**"), // plain dir
+            _ => p,
+        };
+
+        if is_hidden_glob(norm) {
+            hid_inc.add(Glob::new(norm)?);
+        } else {
+            vis_inc.add(Glob::new(norm)?);
+        }
+    }
+
+    Ok((vis_inc.build()?, hid_inc.build()?, exc.build()?))
+}
+
 #[derive(Parser)]
 #[command(name = "lf")]
 #[command(about = "A fast file aggregation tool with glob patterns and tokenization")]
@@ -136,69 +172,7 @@ fn main() -> Result<()> {
     }
 
     // Build include and exclude glob sets
-    let mut include_builder = GlobSetBuilder::new();
-    let mut exclude_builder = GlobSetBuilder::new();
-
-    for pattern in &args.patterns {
-        if let Some(exclude_pattern) = pattern.strip_prefix('~') {
-            // Handle different types of exclusion patterns
-            let actual_exclude_pattern = if exclude_pattern.ends_with('/') {
-                // Directory ending with slash - exclude everything in it
-                format!("{}**", exclude_pattern)
-            } else if exclude_pattern.contains('*') || exclude_pattern.contains('/') {
-                // Glob pattern or contains path separator - use as is
-                exclude_pattern.to_string()
-            } else if exclude_pattern.starts_with('.') && exclude_pattern.chars().skip(1).all(|c| c != '.') {
-                // Dotted directory like .cache, .git - exclude directory contents
-                format!("{}/**", exclude_pattern)
-            } else if exclude_pattern.contains('.') && exclude_pattern.rfind('.').unwrap() > 0 {
-                // File with extension (dot not at start) - use as is
-                exclude_pattern.to_string()
-            } else {
-                // Simple name without extension - could be directory, add /** to exclude directory contents
-                format!("{}/**", exclude_pattern)
-            };
-            
-            let glob = Glob::new(&actual_exclude_pattern)
-                .with_context(|| format!("Invalid exclude pattern: {}", actual_exclude_pattern))?;
-            exclude_builder.add(glob);
-            
-            // Also add the exact pattern for files in root directory
-            if !exclude_pattern.contains('/') && !exclude_pattern.contains('*') {
-                let root_glob = Glob::new(exclude_pattern)
-                    .with_context(|| format!("Invalid exclude pattern: {}", exclude_pattern))?;
-                exclude_builder.add(root_glob);
-            }
-        } else {
-            // Handle special cases for directory patterns
-            let actual_pattern = match pattern.as_str() {
-                "." => "**/*",           // Current directory means all files recursively
-                "./" => "**/*",          // Same as above
-                path if path.ends_with('/') => &format!("{}**/*", path),  // Directory/ means dir/**/*
-                path if !path.contains('*') && !path.contains('.') && !path.contains('/') => {
-                    // Simple directory name like "src" - include all files in that directory
-                    &format!("{}/**", path)
-                }
-                _ => pattern,            // Use pattern as-is for everything else
-            };
-            
-            let glob = Glob::new(actual_pattern)
-                .with_context(|| format!("Invalid include pattern: {}", actual_pattern))?;
-            include_builder.add(glob);
-        }
-    }
-
-    let include_set = include_builder.build()?;
-    let exclude_set = exclude_builder.build()?;
-
-    // Check if any patterns explicitly include hidden files/directories
-    let has_explicit_hidden_patterns = args.patterns.iter().any(|pattern| {
-        if pattern.starts_with('~') {
-            false // Exclude patterns don't count
-        } else {
-            pattern.starts_with('.') || pattern.contains("/.") || pattern == "**/*" || pattern == "."
-        }
-    });
+    let (include_set, hidden_include_set, exclude_set) = build_glob_sets(&args.patterns)?;
 
     // Collect matching files
     let files: Vec<PathBuf> = WalkDir::new(".")
@@ -207,35 +181,23 @@ fn main() -> Result<()> {
         .filter(|e| e.file_type().is_file())
         .map(|e| e.into_path())
         .filter(|path| {
-            // Convert path to string and normalize separators for cross-platform compatibility
             let path_str = path.to_string_lossy().replace('\\', "/");
-            
-            // Also try with the path stripped of leading "./"
-            let stripped_path = path_str.strip_prefix("./").unwrap_or(&path_str);
-            
-            // Get filename as string
-            let filename = path.file_name()
-                .map(|f| f.to_string_lossy().to_string())
-                .unwrap_or_default();
-            
-            // Check if this is a hidden file/directory (unless explicitly included)
-            if !has_explicit_hidden_patterns {
-                // Check if any component of the path starts with a dot (hidden)
-                let path_components: Vec<&str> = stripped_path.split('/').collect();
-                if path_components.iter().any(|component| component.starts_with('.') && *component != "." && *component != "..") {
-                    return false;
-                }
-            }
-            
-            // Check both original and stripped paths
-            let matches_include = include_set.is_match(&path_str) || 
-                                include_set.is_match(stripped_path) ||
-                                include_set.is_match(&filename);
-            let matches_exclude = exclude_set.is_match(&path_str) || 
-                                exclude_set.is_match(stripped_path) ||
-                                exclude_set.is_match(&filename);
-            
-            matches_include && !matches_exclude
+            let stripped = path_str.strip_prefix("./").unwrap_or(&path_str);
+            let file = path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+
+            let hidden = stripped.split('/').any(|c| c.starts_with('.') && c != "." && c != "..");
+
+            let inc = if hidden {
+                hidden_include_set.is_match(&path_str)
+                    || hidden_include_set.is_match(stripped)
+                    || hidden_include_set.is_match(&file)
+            } else {
+                include_set.is_match(&path_str)
+                    || include_set.is_match(stripped)
+                    || include_set.is_match(&file)
+            };
+
+            inc && !exclude_set.is_match(&path_str) && !exclude_set.is_match(stripped) && !exclude_set.is_match(&file)
         })
         .collect();
 
