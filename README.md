@@ -1,31 +1,53 @@
 # lf - List Files CLI
 
-A fast file aggregation tool that concatenates multiple files based on glob patterns and copies the result to clipboard or file. Perfect for sharing code with AI assistants or creating documentation.
+lf – lightning-fast project snapshotter (code + docs ⇢ clipboard / file)
 
-## Features
+## TL;DR
 
-- 🚀 **Fast**: Parallel processing with Rust
-- 📋 **Clipboard integration**: Automatically copies output to clipboard
-- 🔍 **Glob patterns**: Flexible file matching with include/exclude patterns
-- 🔢 **Token counting**: Built-in token counting for AI context limits
-- 📊 **Binary file handling**: Smart detection and metadata for binary files
-- 🙈 **Hidden file protection**: Excludes hidden files/directories by default
+````bash
+# everything except hidden + Node artefacts
+lf . ~.git ~node_modules        # → clipboard
+
+# whole project → file
+lf . -o gist.txt
+
+# only src/, exclude utils/
+lf src ~src/utils/**/*.ts
+````
 
 ## Installation
 
 ```bash
+# Full build with token counting (default)
 cargo build --release
+
+# Slim build (no token counting, smaller binary)
+cargo build --release --no-default-features
 ```
+
+* On Windows, the default binary is ~5.0 MB
+* With `--no-default-features`, it shrinks to ~1.07 MB
 
 The executable will be in `target/release/lf`.
 
-## Usage
+## Concepts
 
-```bash
-lf [PATTERNS...] [OPTIONS]
-```
+* **Include / Exclude** – glob, prefix `~` to drop.
+* **Hidden rule** – any path with `/.` ignored *unless* your pattern also starts with `.` or contains `/.`.
+* **Directory shorthand** – bare dir name ⇒ `<dir>/**`.
 
-### Basic Examples
+## Cheat-sheet
+
+| Intention               | Command           |
+| ----------------------- | ----------------- |
+| Add single hidden file  | `lf . .env`       |
+| Add hidden dir          | `lf . .obsidian`  |
+| Everything, even hidden | `lf "**/*"`       |
+| Only Rust tests         | `lf **/*_test.rs` |
+
+## Examples
+
+### Basic Usage
 
 ```bash
 # Get all .rs files in the project
@@ -36,14 +58,9 @@ lf src/main.rs Cargo.toml README.md
 
 # Get all files in src directory
 lf src/
-
-# Get all markdown files recursively
-lf **/*.md
 ```
 
 ### Exclusion Examples
-
-Use `~` prefix to exclude patterns:
 
 ```bash
 # All Rust files except tests
@@ -51,14 +68,12 @@ lf **/*.rs ~**/*test*
 
 # Everything except hidden directories and node_modules
 lf . ~.git ~node_modules ~.vscode
-
-# All files except specific extensions
-lf **/* ~*.log ~*.tmp
 ```
 
-### Include Hidden Files
+### Hidden Files
 
-Hidden files (starting with `.`) are excluded by default unless explicitly specified:
+Hidden files (starting with `.`) are excluded by default unless explicitly
+specified:
 
 ```bash
 # This will NOT include .env, .gitignore, etc.
@@ -68,7 +83,7 @@ lf *
 lf src/ .env .gitignore
 
 # This will include ALL files including hidden ones
-lf .
+lf "**/*"
 ```
 
 ### Output Options
@@ -84,7 +99,9 @@ lf *.rs --no-clipboard
 lf *.rs --no-clipboard | grep "TODO"
 ```
 
-## Binary Files
+## Appendix
+
+### Binary Files
 
 Binary files are detected by extension and show metadata instead of content:
 
@@ -93,4 +110,10 @@ target/release/lf.exe
 [Binary file: EXE - Size: 2.3 MB]
 ```
 
-Supported binary types: executables, images, videos, audio, archives, documents, and more.
+Supported binary types: executables, images, videos, audio, archives,
+documents, and more.
+
+### Hidden Path Semantics
+
+"Hidden" means any path component beginning with dot – aligns with POSIX and
+Git-ignore semantics.

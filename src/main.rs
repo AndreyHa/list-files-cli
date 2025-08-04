@@ -12,6 +12,7 @@ use std::{
         Arc, Mutex,
     },
 };
+#[cfg(feature = "token-counting")]
 use tiktoken_rs::o200k_base;
 use walkdir::WalkDir;
 
@@ -20,11 +21,13 @@ trait Tokenizer: Send + Sync {
     fn count_tokens(&self, text: &str) -> usize;
 }
 
+#[cfg(feature = "token-counting")]
 /// Implementation using the o200k_base tokenizer
 struct O200kTokenizer {
     bpe: tiktoken_rs::CoreBPE,
 }
 
+#[cfg(feature = "token-counting")]
 impl O200kTokenizer {
     fn new() -> Result<Self> {
         let bpe = o200k_base().context("Failed to initialize o200k_base tokenizer")?;
@@ -32,9 +35,21 @@ impl O200kTokenizer {
     }
 }
 
+#[cfg(feature = "token-counting")]
 impl Tokenizer for O200kTokenizer {
     fn count_tokens(&self, text: &str) -> usize {
         self.bpe.encode_with_special_tokens(text).len()
+    }
+}
+
+#[cfg(not(feature = "token-counting"))]
+/// Dummy tokenizer that always returns 0
+struct DummyTokenizer;
+
+#[cfg(not(feature = "token-counting"))]
+impl Tokenizer for DummyTokenizer {
+    fn count_tokens(&self, _text: &str) -> usize {
+        0
     }
 }
 
@@ -130,10 +145,13 @@ fn build_glob_sets(patterns: &[String]) -> Result<(GlobSet, GlobSet, GlobSet)> {
 
         // normalise convenience shorthand
         let norm = match p.as_str() {
-            "." | "./"          => "**/*",
-            dir if dir.ends_with('/') => &format!("{dir}**/*"),
-            dir if !dir.contains(['*', '/', '.']) =>
-                &format!("{dir}/**"), // plain dir
+            "." | "./"                      => "**/*",
+            dir if dir.ends_with('/')       => &format!("{dir}**/*"),
+            // NEW – treat bare hidden dir the same way we already treat visible dirs
+            dir if dir.starts_with('.') 
+                 && !dir.contains(['*', '/']) => &format!("{dir}/**"),
+            dir if !dir.contains(['*', '/', '.']) 
+                                             => &format!("{dir}/**"),
             _ => p,
         };
 
@@ -149,7 +167,7 @@ fn build_glob_sets(patterns: &[String]) -> Result<(GlobSet, GlobSet, GlobSet)> {
 
 #[derive(Parser)]
 #[command(name = "lf")]
-#[command(about = "A fast file aggregation tool with glob patterns and tokenization")]
+#[command(about = "A fast file aggregation tool with glob patterns and tokenization. Hidden paths are skipped unless a pattern containing a '.' at the first path-segment is supplied.")]
 struct Args {
     /// One or more glob patterns; prefix with `~` to exclude matches
     patterns: Vec<String>,
@@ -207,7 +225,10 @@ fn main() -> Result<()> {
     }
 
     // Initialize tokenizer
+    #[cfg(feature = "token-counting")]
     let tokenizer = Arc::new(O200kTokenizer::new()?);
+    #[cfg(not(feature = "token-counting"))]
+    let tokenizer = Arc::new(DummyTokenizer);
 
     // Process files in parallel
     let total_lines = Arc::new(AtomicUsize::new(0));
@@ -322,6 +343,7 @@ fn main() -> Result<()> {
     let final_tokens = total_tokens.load(Ordering::Relaxed);
 
     println!("Lines: {}", final_lines);
+    #[cfg(feature = "token-counting")]
     println!("Tokens (o200k_base): {}", final_tokens);
 
     Ok(())

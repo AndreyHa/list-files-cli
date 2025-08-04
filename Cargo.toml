@@ -1,15 +1,19 @@
 [package]
 name = "lf"
-description = "List files with line and token counts"
+description = "List files with optional line and token counts"
 version = "0.1.0"
 edition = "2024"
 default-run = "lf"
+
+[features]
+default = ["token-counting"]
+token-counting = ["dep:tiktoken-rs"]
 
 [dependencies]
 walkdir = "2"
 clap = { version = "4", features = ["derive"] }
 arboard = "3"
-tiktoken-rs = "0.5"
+tiktoken-rs = { version = "0.5", optional = true }
 globset = "0.4"
 rayon = "1.8"
 anyhow = "1.0"
