@@ -179,6 +179,10 @@ struct Args {
     /// Do not copy content to the clipboard
     #[arg(short, long)]
     no_clipboard: bool,
+
+    /// Replace Java import lines with `import ...`
+    #[arg(long)]
+    mask_java_imports: bool,
 }
 
 fn main() -> Result<()> {
@@ -234,6 +238,9 @@ fn main() -> Result<()> {
     let total_lines = Arc::new(AtomicUsize::new(0));
     let total_tokens = Arc::new(AtomicUsize::new(0));
 
+    // Expose mask option to worker threads
+    let mask_java_imports = args.mask_java_imports;
+
     // Determine output strategy
     // Use clipboard when no explicit output file and no --no-clipboard flag
     // But if stdout is redirected (like > file.txt), write to stdout instead
@@ -283,6 +290,35 @@ fn main() -> Result<()> {
                 content.push_str(&line);
                 content.push('\n');
                 line_count += 1;
+            }
+
+            // If requested, mask Java import lines before token counting
+            if mask_java_imports {
+                if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+                    if ext.eq_ignore_ascii_case("java") {
+                        let mut new_content = String::new();
+                        let mut in_import_block = false;
+                        for line in content.lines() {
+                            if line.trim_start().starts_with("import ") {
+                                if !in_import_block {
+                                    // start of an import block -> emit single placeholder
+                                    new_content.push_str("import ...\n");
+                                    in_import_block = true;
+                                }
+                                // skip subsequent import lines
+                            } else {
+                                // any non-import line resets the import-block state
+                                new_content.push_str(line);
+                                new_content.push('\n');
+                                in_import_block = false;
+                            }
+                        }
+                        // If there were no imports, keep original content (avoid accidental removal)
+                        if new_content.contains("import ...") {
+                            content = new_content;
+                        }
+                    }
+                }
             }
 
             let token_count = tokenizer.count_tokens(&content);

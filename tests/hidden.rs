@@ -34,3 +34,13 @@ fn test_bare_hidden_dir_normalization() {
     // In full implementation, would call build_glob_sets and verify
     // that the pattern gets properly normalized to ".obsidian/**"
 }
+
+// Test placeholder: ensure Java import masking works (run manually)
+// This crate is a binary; unit tests for CLI behavior can be implemented
+// as integration tests using `assert_cmd` and a sample Java file.
+
+#[test]
+fn java_import_masking_placeholder() {
+    // Left as a placeholder: run `lf . --mask-java-imports` against sample
+    // Java files and assert output contains `import ...` instead of full imports.
+}

@@ -99,6 +99,15 @@ lf *.rs --no-clipboard
 lf *.rs --no-clipboard | grep "TODO"
 ```
 
+### Java import masking
+
+If you want to anonymize Java imports (replace `import something` with `import ...`) use:
+
+```bash
+# Mask imports in Java files
+lf . --mask-java-imports
+```
+
 ## Appendix
 
 ### Binary Files
@@ -117,3 +126,7 @@ documents, and more.
 
 "Hidden" means any path component beginning with dot – aligns with POSIX and
 Git-ignore semantics.
+
+## Tests
+
+A basic test was added to ensure Java import masking behavior. See `tests/hidden.rs`.
