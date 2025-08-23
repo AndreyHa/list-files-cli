@@ -49,8 +49,6 @@ fn gitignore_negation_is_ignored_but_common_cases_work() {
     temp.child("build").child("other.txt").write_str("no\n").unwrap();
     temp.child(".gitignore").write_str("build\n!build/keep.txt\n").unwrap();
 
-    // Our simple parser ignores negations, so keep.txt will be excluded by the
-    // simple conversion; assert we at least exclude the directory (other.txt)
     let mut cmd = Command::cargo_bin("lf").unwrap();
     cmd.current_dir(&temp).arg("**/*").arg("--no-clipboard");
 
@@ -58,5 +56,25 @@ fn gitignore_negation_is_ignored_but_common_cases_work() {
         .success()
         .stdout(predicate::str::contains("other.txt").not());
 
+    temp.close().unwrap();
+}
+
+#[test]
+fn gradle_build_bin_are_ignored() {
+    let temp = assert_fs::TempDir::new().unwrap();
+    temp.child("module").child("build").create_dir_all().unwrap();
+    temp.child("module").child("build").child("out.jar").write_str("x").unwrap();
+    temp.child("module").child("bin").create_dir_all().unwrap();
+    temp.child("module").child("bin").child("run.exe").write_str("x").unwrap();
+    temp.child("module").child("src").create_dir_all().unwrap();
+    temp.child("module").child("src").child("Main.java").write_str("class X{}\n").unwrap();
+    temp.child(".gitignore").write_str("/build\n/bin\n").unwrap();
+    let mut cmd = Command::cargo_bin("lf").unwrap();
+    cmd.current_dir(&temp).arg("**/*").arg("--no-clipboard");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("src/Main.java"))
+        .stdout(predicate::str::contains("build").not())
+        .stdout(predicate::str::contains("bin").not());
     temp.close().unwrap();
 }

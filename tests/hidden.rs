@@ -3,24 +3,17 @@ use assert_fs::prelude::*;
 use predicates::prelude::*;
 use std::process::Command;
 
-// Integration tests for hidden handling and .gitignore support
-
 #[test]
 fn respects_gitignore_by_default() {
     let temp = assert_fs::TempDir::new().unwrap();
 
-    // Files
     let src = temp.child("src");
     src.create_dir_all().unwrap();
     src.child("main.rs").write_str("fn main(){}\n").unwrap();
     let node = temp.child("node_modules");
     node.create_dir_all().unwrap();
     node.child("pkg.json").write_str("{}\n").unwrap();
-
-    // .gitignore ignores node_modules
     temp.child(".gitignore").write_str("node_modules\n").unwrap();
-
-    // Run: include everything
     let mut cmd = Command::cargo_bin("lf").unwrap();
     cmd.current_dir(&temp)
         .arg("**/*")
