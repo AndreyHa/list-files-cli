@@ -35,6 +35,7 @@ The executable will be in `target/release/lf`.
 * **Include / Exclude** – glob, prefix `~` to drop.
 * **Hidden rule** – any path with `/.` ignored *unless* your pattern also starts with `.` or contains `/.`.
 * **Directory shorthand** – bare dir name ⇒ `<dir>/**`.
+* **.gitignore aware** – by default, entries ignored by `.gitignore`, global gitignore, and `.git/info/exclude` are skipped. Use `--no-gitignore` to disable.
 
 ## Cheat-sheet
 
@@ -100,6 +101,19 @@ lf *.rs --no-clipboard | grep "TODO"
 ```
 
 ### Java import masking
+### .gitignore handling
+
+By default `lf` honors `.gitignore`, global gitignore, and Git exclude files using the same engine as `ripgrep`.
+
+Examples:
+
+```bash
+# Respect .gitignore (default)
+lf . --no-clipboard
+
+# Ignore .gitignore rules (include everything that matches patterns)
+lf . --no-gitignore --no-clipboard
+```
 
 If you want to anonymize Java imports (replace `import something` with `import ...`) use:
 

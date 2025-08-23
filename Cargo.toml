@@ -18,6 +18,7 @@ globset = "0.4"
 rayon = "1.8"
 anyhow = "1.0"
 thiserror = "1.0"
+ignore = "0.4"
 
 [profile.release]
 opt-level = "z"            # Optimize for size
@@ -25,3 +26,8 @@ lto = true                 # Enable link-time optimization
 codegen-units = 1          # Better optimization at the cost of compile time
 strip = true               # Strip symbols
 panic = "abort"            # Remove unwinding machinery
+
+[dev-dependencies]
+assert_cmd = "2"
+assert_fs = "1"
+predicates = "3"
