@@ -6,13 +6,13 @@ lf – lightning-fast project snapshotter (code + docs ⇢ clipboard / file)
 
 ````bash
 # everything except hidden + Node artefacts
-lf . ~.git ~node_modules        # → clipboard
+lf . @.git @node_modules        # → clipboard
 
 # whole project → file
 lf . -o gist.txt
 
 # only src/, exclude utils/
-lf src ~src/utils/**/*.ts
+lf src @src/utils/**/*.ts
 ````
 
 ## Installation
@@ -32,7 +32,8 @@ The executable will be in `target/release/lf`.
 
 ## Concepts
 
-* **Include / Exclude** – glob, prefix `~` to drop.
+* **Include / Exclude** – glob, prefix `@` to drop.
+* **Shell Escaping** – On Unix systems, quote exclusion patterns: `lf . "@.git" "@node_modules"`
 * **Hidden rule** – any path with `/.` ignored *unless* your pattern also starts with `.` or contains `/.`.
 * **Directory shorthand** – bare dir name ⇒ `<dir>/**`.
 * **.gitignore aware** – by default, entries ignored by `.gitignore`, global gitignore, and `.git/info/exclude` are skipped. Use `--no-gitignore` to disable.
@@ -65,10 +66,15 @@ lf src/
 
 ```bash
 # All Rust files except tests
-lf **/*.rs ~**/*test*
+lf **/*.rs @**/*test*
 
 # Everything except hidden directories and node_modules
-lf . ~.git ~node_modules ~.vscode
+lf . @.git @node_modules @.vscode
+
+**Note:** On Unix shells (bash, zsh), quote exclusion patterns to prevent shell interpretation:
+```bash
+lf . "@.git" "@node_modules" "@.vscode"
+```
 ```
 
 ### Hidden Files

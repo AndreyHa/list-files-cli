@@ -38,7 +38,7 @@ fn full_coverage_scenarios() {
     let mut cmd = Command::cargo_bin("lf").unwrap();
     cmd.current_dir(&temp)
         .arg("**/*")
-        .arg("~secret.txt")
+        .arg("@secret.txt")
         .arg("--no-clipboard");
     cmd.assert()
         .success()

@@ -39,7 +39,7 @@ pub fn build_glob_sets(patterns: &[String], honor_gitignore: bool) -> Result<(Gl
     let mut exc = GlobSetBuilder::new();
 
     for p in patterns {
-        if let Some(raw) = p.strip_prefix('~') { exc.add(Glob::new(raw)?); continue; }
+        if let Some(raw) = p.strip_prefix('@') { exc.add(Glob::new(raw)?); continue; }
         let norm = normalize_pattern(p);
         if is_hidden_glob(&norm) { hid_inc.add(Glob::new(&norm)?); } else { vis_inc.add(Glob::new(&norm)?); }
     }
