@@ -481,6 +481,7 @@ dependencies = [
  "ignore",
  "predicates",
  "rayon",
+ "tempfile",
  "thiserror",
  "tiktoken-rs",
  "walkdir",

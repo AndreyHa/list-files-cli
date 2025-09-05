@@ -31,3 +31,4 @@ panic = "abort"            # Remove unwinding machinery
 assert_cmd = "2"
 assert_fs = "1"
 predicates = "3"
+tempfile = "3"

@@ -100,6 +100,43 @@ lf *.rs --no-clipboard
 lf *.rs --no-clipboard | grep "TODO"
 ```
 
+### Tree Mode
+
+Use `--tree` (or `-T`) to output a text-based file tree first, followed by the files in the exact order they appear in the tree. This is useful for structured snapshots.
+
+```bash
+# Tree to clipboard (default)
+lf . --tree
+
+# Tree to stdout
+lf . --tree --no-clipboard
+
+# Tree to file
+lf src/ ~target --tree -o snapshot.txt
+```
+
+The output format is:
+```
+File Tree:
+.
+├── src
+│   ├── main.rs
+│   └── lib.rs
+└── README.md
+
+src/main.rs
+<content of main.rs>
+
+src/lib.rs
+<content of lib.rs>
+
+README.md
+<content of README.md>
+
+Lines: 42
+Tokens (o200k_base): 1234
+```
+
 ### Java import masking
 ### .gitignore handling
 

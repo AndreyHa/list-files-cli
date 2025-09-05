@@ -30,6 +30,7 @@ fn main() -> Result<()> {
         args.no_clipboard,
         args.mask_java_imports,
         args.no_gitignore,
+        args.tree,
     )?;
     Ok(())
 }

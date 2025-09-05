@@ -1,15 +1,17 @@
 use crate::binary::{get_binary_file_info, is_binary_file};
 use crate::clipboard::ClipboardSink;
 use crate::fs::{FileReader, WalkerFactory};
+use crate::output::{BufferedOutputSink, OutputSink};
 use crate::patterns::{build_glob_sets, path_matches};
 use crate::tokenizer::Tokenizer;
+use crate::tree::build_tree;
 use anyhow::{Context, Result};
 use globset::GlobSet;
 use rayon::prelude::*;
-use std::io::{BufWriter, Write};
+use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub struct Deps<'a> {
     pub walker: &'a dyn WalkerFactory,
@@ -73,43 +75,75 @@ fn collect_matching_files(walker: &dyn WalkerFactory, include: &GlobSet, hidden_
         }
     }
     files
-}
-
-pub fn run_app(deps: Deps, patterns: &[String], output_path: Option<&Path>, no_clipboard: bool, mask_java_imports: bool, no_gitignore: bool) -> Result<Stats> {
+}pub fn run_app(deps: Deps, patterns: &[String], output_path: Option<&Path>, no_clipboard: bool, mask_java_imports: bool, no_gitignore: bool, tree: bool) -> Result<Stats> {
     let (include_set, hidden_include_set, exclude_set) = build_glob_sets(patterns, !no_gitignore)?;
-    let files = collect_matching_files(deps.walker, &include_set, &hidden_include_set, &exclude_set, no_gitignore);
-    if files.is_empty() {
+    let mut files = collect_matching_files(deps.walker, &include_set, &hidden_include_set, &exclude_set, no_gitignore);
+
+    if files.is_empty() && !tree {
         println!("No files found matching the patterns.");
         return Ok(Stats { lines: 0, tokens: 0 });
     }
+
+    // Sort files for consistent tree order
+    files.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
+
     let total_lines = Arc::new(AtomicUsize::new(0));
     let total_tokens = Arc::new(AtomicUsize::new(0));
     let use_clipboard = !no_clipboard && output_path.is_none();
-    let content_buffer = if use_clipboard { Some(Arc::new(Mutex::new(String::new()))) } else { None };
-    let mut output_writer: Option<Box<dyn Write + Send>> = if let Some(p) = output_path {
+
+    // Create output sink
+    let mut output_sink = if let Some(p) = output_path {
         let f = std::fs::File::create(p).with_context(|| format!("Failed to create output file: {}", p.display()))?;
-        Some(Box::new(BufWriter::new(f)))
-    } else if no_clipboard { Some(Box::new(std::io::stdout())) } else { None };
+        BufferedOutputSink::new(OutputSink::File(BufWriter::new(f)))
+    } else if use_clipboard {
+        if let Some(cb) = deps.clipboard {
+            BufferedOutputSink::new(OutputSink::Clipboard(cb))
+        } else {
+            BufferedOutputSink::new(OutputSink::Stdout)
+        }
+    } else {
+        BufferedOutputSink::new(OutputSink::Stdout)
+    };
+
     let tokenizer = deps.tokenizer.clone();
     let reader = deps.reader;
-    let results: Result<Vec<(PathBuf, String, usize, usize)>> = files.par_iter().map(|p| {
-        let (content, lines, tokens) = process_file(p, reader, tokenizer.as_ref(), mask_java_imports)?;
-        Ok((p.clone(), content, lines, tokens))
-    }).collect();
-    let results = results?;
-    for (path, content, lines, tokens) in results {
+
+    // If tree mode, generate and output tree first
+    let ordered_files = if tree {
+        let tree = build_tree(&files);
+        let tree_entry = format!("File Tree:\n{}\n\n", tree.text);
+        output_sink.write_all(&tree_entry)?;
+        tree.ordered_paths
+    } else {
+        files
+    };
+
+    // Process files in parallel with indices for deterministic ordering
+    let results: Result<Vec<(usize, PathBuf, String, usize, usize)>> = ordered_files
+        .iter()
+        .enumerate()
+        .par_bridge()
+        .map(|(idx, p)| {
+            let (content, lines, tokens) = process_file(p, reader, tokenizer.as_ref(), mask_java_imports)?;
+            Ok((idx, p.clone(), content, lines, tokens))
+        })
+        .collect();
+
+    let mut results = results?;
+    // Sort by index to ensure deterministic order
+    results.sort_by_key(|(idx, ..)| *idx);
+
+    // Output files in order
+    for (_idx, path, content, lines, tokens) in results {
         total_lines.fetch_add(lines, Ordering::Relaxed);
         total_tokens.fetch_add(tokens, Ordering::Relaxed);
         let out = format_entry(&path, &content);
-        if let Some(ref buf) = content_buffer { buf.lock().unwrap().push_str(&out); }
-        else if let Some(ref mut w) = output_writer { w.write_all(out.as_bytes()).context("Failed to write to output")?; }
-        else { print!("{}", out); }
+        output_sink.write_all(&out)?;
     }
-    if let Some(buf) = content_buffer {
-        let content = buf.lock().unwrap().clone();
-        if let Some(cb) = deps.clipboard { if cb.set_text(content.clone()).is_err() { print!("{}", content); } } else { print!("{}", content); }
-    }
-    if let Some(mut w) = output_writer { w.flush().context("Failed to flush final output")?; }
+
+    // Finish output
+    output_sink.finish()?;
+
     let lines = total_lines.load(Ordering::Relaxed);
     let tokens = total_tokens.load(Ordering::Relaxed);
     println!("Lines: {}", lines);

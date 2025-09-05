@@ -83,3 +83,78 @@ fn full_coverage_scenarios() {
 
     temp.close().unwrap();
 }
+
+#[test]
+fn tree_flag_outputs_tree_and_files() {
+    let temp = assert_fs::TempDir::new().unwrap();
+
+    temp.child("a.txt").write_str("content a\n").unwrap();
+    temp.child("b.txt").write_str("content b\n").unwrap();
+    let sub = temp.child("subdir");
+    sub.create_dir_all().unwrap();
+    sub.child("c.txt").write_str("content c\n").unwrap();
+
+    let mut cmd = Command::cargo_bin("lf").unwrap();
+    let output = cmd.current_dir(&temp)
+        .arg("**/*")
+        .arg("--tree")
+        .arg("--no-clipboard")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&output);
+
+    // Check that tree is present
+    assert!(s.contains("File Tree:"));
+    assert!(s.contains("├── a.txt"));
+    assert!(s.contains("├── b.txt"));
+    assert!(s.contains("└── subdir"));
+    assert!(s.contains("    └── c.txt"));
+
+    // Check ordering: tree first, then files in tree order
+    let pos_tree = s.find("File Tree:").unwrap();
+    let pos_a = s.find("\na.txt\n").unwrap();
+    let pos_b = s.find("\nb.txt\n").unwrap();
+    let pos_c = s.find("\nsubdir/c.txt\n").unwrap();
+    assert!(pos_tree < pos_a);
+    assert!(pos_a < pos_b);
+    assert!(pos_b < pos_c);
+
+    // Check that files are included after tree
+    assert!(s.contains("a.txt"));
+    assert!(s.contains("content a"));
+    assert!(s.contains("b.txt"));
+    assert!(s.contains("content b"));
+    assert!(s.contains("subdir/c.txt"));
+    assert!(s.contains("content c"));
+
+    temp.close().unwrap();
+}
+
+#[test]
+fn tree_flag_empty_selection_outputs_minimal_tree() {
+    let temp = assert_fs::TempDir::new().unwrap();
+
+    let mut cmd = Command::cargo_bin("lf").unwrap();
+    let output = cmd.current_dir(&temp)
+        .arg("**/*")
+        .arg("--tree")
+        .arg("--no-clipboard")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&output);
+
+    // Should contain minimal tree
+    assert!(s.contains("File Tree:\n.\n"));
+    // Should have Lines: 0
+    assert!(s.contains("Lines: 0"));
+    // Should not have "No files found"
+    assert!(!s.contains("No files found"));
+
+    temp.close().unwrap();
+}

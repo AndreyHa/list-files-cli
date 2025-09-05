@@ -47,7 +47,33 @@ mod tests {
             tokenizer: std::sync::Arc::new(T0),
             clipboard: Some(&cb),
         };
-        let stats = run_app(deps, &["**/*".to_string()], None, false, false, false).unwrap();
+        let stats = run_app(deps, &["**/*".to_string()], None, false, false, false, false).unwrap();
         assert_eq!(stats.lines, 1);
+    }
+
+    #[test]
+    fn app_tree_mode_clipboard_ordering() {
+        let d = tempdir().unwrap();
+        fs::write(d.path().join("a.txt"), "A\n").unwrap();
+        let subdir = d.path().join("subdir");
+        fs::create_dir(&subdir).unwrap();
+        fs::write(subdir.join("b.txt"), "B\n").unwrap();
+        let cb = NoopClipboard(RefCell::new(None));
+        let deps = Deps {
+            walker: &FixedWalker { root: d.path().to_path_buf() },
+            reader: &TestReader,
+            tokenizer: std::sync::Arc::new(T0),
+            clipboard: Some(&cb),
+        };
+        let _stats = run_app(deps, &["**/*".to_string()], None, false, false, false, true).unwrap();
+        let content = cb.0.borrow().as_ref().unwrap().clone();
+        // Check that tree header is first
+        assert!(content.starts_with("File Tree:\n"));
+        // Check ordering: tree, then a.txt, then subdir/b.txt
+        let pos_tree = content.find("File Tree:").unwrap();
+        let pos_a = content.find("\na.txt\n").unwrap();
+        let pos_b = content.find("\nsubdir/b.txt\n").unwrap();
+        assert!(pos_tree < pos_a);
+        assert!(pos_a < pos_b);
     }
 }
