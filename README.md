@@ -30,6 +30,28 @@ cargo build --release --no-default-features
 
 The executable will be in `target/release/lf`.
 
+### Linux/WSL Clipboard Requirements
+
+On Linux and WSL, clipboard functionality requires additional system dependencies:
+
+**For X11:**
+```bash
+sudo apt-get install xclip
+# or
+sudo apt-get install xsel
+```
+
+**For Wayland:**
+```bash
+sudo apt-get install wl-clipboard
+```
+
+**For WSL specifically:**
+- WSL2 with WSLg (Windows 11) has built-in clipboard support
+- Older WSL versions may need `xclip` or `xsel` with X server configured
+
+If clipboard dependencies are not installed, `lf` will print the output to stdout with an informative error message.
+
 ## Concepts
 
 * **Include / Exclude** – glob, prefix `@` to drop.

@@ -107,7 +107,23 @@ pub fn run_app(deps: Deps, patterns: &[String], output_path: Option<&Path>, no_c
     }
     if let Some(buf) = content_buffer {
         let content = buf.lock().unwrap().clone();
-        if let Some(cb) = deps.clipboard { if cb.set_text(content.clone()).is_err() { print!("{}", content); } } else { print!("{}", content); }
+        if let Some(cb) = deps.clipboard {
+            match cb.set_text(content.clone()) {
+                Ok(_) => {
+                    eprintln!("Content copied to clipboard successfully.");
+                }
+                Err(e) => {
+                    eprintln!("Failed to copy to clipboard: {}", e);
+                    eprintln!("On Linux/WSL, you may need to install clipboard utilities:");
+                    eprintln!("  - For X11: sudo apt-get install xclip or xsel");
+                    eprintln!("  - For Wayland: sudo apt-get install wl-clipboard");
+                    eprintln!("\nPrinting output to stdout instead:\n");
+                    print!("{}", content);
+                }
+            }
+        } else {
+            print!("{}", content);
+        }
     }
     if let Some(mut w) = output_writer { w.flush().context("Failed to flush final output")?; }
     let lines = total_lines.load(Ordering::Relaxed);
